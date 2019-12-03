@@ -1,54 +1,98 @@
 #![allow(dead_code)]
 
+use derive_more::{Add, AddAssign};
+use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
-use std::collections::HashSet;
 
-type Point = (isize, isize);
+#[derive(PartialEq, Eq, Hash, Add, AddAssign, Copy, Clone)]
+struct Point(isize, isize);
 
-fn update(len: isize, dx: isize, dy: isize, point: &mut Point) -> impl Iterator<Item=Point> {
-    let (x, y) = *point;
-    point.0 += dx * len;
-    point.1 += dy * len;
-    (0..=len).map(move |d| (x + d * dx, y + d * dy))
+struct Wire {
+    // Map from `point` to `shortest distance along wire to reach point`.
+    points: HashMap<Point, isize>,
+    end: Point,
+    length: isize,
 }
 
-fn points_of_segment(line: &str, start: &mut Point) -> impl Iterator<Item=Point> {
-    let (dir, len) = line.split_at(1);
-    let len: isize = len.parse().unwrap();
-    match dir {
-        "U" => update(len, 0, 1, start),
-        "R" => update(len, 1, 0, start),
-        "D" => update(len, 0, -1, start),
-        "L" => update(len, -1, 0, start),
-        _ => panic!(),
+impl Wire {
+    fn add_segment(&mut self, len: isize, dx: isize, dy: isize) {
+        let Point(start_x, start_y) = self.end;
+        let start_length = self.length;
+
+        self.end += Point(dx * len, dy * len);
+        self.length += len;
+
+        for (point, distance) in (1..=len).map(move |distance| {
+            (
+                Point(start_x + distance * dx, start_y + distance * dy),
+                start_length + distance,
+            )
+        }) {
+            // If there's an existing entry, it's closer,
+            // so don't override it.
+            self.points.entry(point).or_insert(distance);
+        }
+    }
+
+    fn process_segment(&mut self, cmd: &str) {
+        let (dir, len) = cmd.split_at(1);
+        let len: isize = len.parse().unwrap();
+        match dir {
+            "U" => self.add_segment(len, 0, 1),
+            "R" => self.add_segment(len, 1, 0),
+            "D" => self.add_segment(len, 0, -1),
+            "L" => self.add_segment(len, -1, 0),
+            _ => panic!(),
+        }
+    }
+
+    fn from_commands(cmds: &str) -> Self {
+        let mut wire = Wire {
+            points: HashMap::new(),
+            end: Point(0, 0),
+            length: 0,
+        };
+        for cmd in cmds.split(',') {
+            wire.process_segment(cmd);
+        }
+        wire
+    }
+
+    fn points(&self) -> impl Iterator<Item = Point> + '_ {
+        self.points.keys().copied()
+    }
+
+    fn points_set(&self) -> HashSet<Point> {
+        self.points().collect()
     }
 }
 
-#[test]
-fn test_points_of_segment() {
-    let mut values = vec![];
-    let start = &mut (0, 0);
-    values = points_of_segment("U3", start).collect();
-    assert_eq!(&values, &[(0, 0), (0, 1), (0, 2), (0, 3)]);
-}
+struct Problem2(Wire, Wire);
 
-fn points_of_steps<'a>(steps: impl Iterator<Item=&'a str>) -> HashSet<Point> {
-    let mut points = HashSet::new();
-    let mut point = (0, 0);
-    for line in steps {
-        points.extend(points_of_segment(line, &mut point));
+impl Problem2 {
+    fn from_commands(wire1: &str, wire2: &str) -> Self {
+        Problem2(Wire::from_commands(wire1), Wire::from_commands(wire2))
     }
-    points
-}
 
-fn steps<'a>(cmd: &'a str) -> impl Iterator<Item=&'a str> {
-    cmd.split(',')
-}
+    fn common_points(&self) -> impl Iterator<Item = Point> + '_ {
+        let w1 = self.0.points_set();
+        let w2 = self.1.points_set();
+        w1.intersection(&w2)
+            .copied()
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
 
-fn points_of_wire(wire: &str) -> HashSet<Point> {
-    let mut res = points_of_steps(steps(wire));
-    res.take(&(0, 0));
-    res
+    fn shortest_intersection(&self) -> isize {
+        self.common_points()
+            .map(|point| {
+                let d1 = self.0.points[&point];
+                let d2 = self.1.points[&point];
+                d1 + d2
+            })
+            .min()
+            .unwrap()
+    }
 }
 
 fn manhattan(a: Point) -> isize {
@@ -56,9 +100,35 @@ fn manhattan(a: Point) -> isize {
 }
 
 fn closest_distance(wire1: &str, wire2: &str) -> isize {
-    let w1 = points_of_wire(wire1);
-    let w2 = points_of_wire(wire2);
+    let w1 = Wire::from_commands(wire1).points_set();
+    let w2 = Wire::from_commands(wire2).points_set();
     w1.intersection(&w2).copied().map(manhattan).min().unwrap()
+}
+
+#[test]
+fn problem_2_examples() {
+    let wire1 = "R8,U5,L5,D3";
+    let wire2 = "U7,R6,D4,L4";
+    let p = Problem2::from_commands(wire1, wire2);
+    assert_eq!(p.shortest_intersection(), 30);
+
+    let wire1 = "R75,D30,R83,U83,L12,D49,R71,U7,L72";
+    let wire2 = "U62,R66,U55,R34,D71,R55,D58,R83";
+    let p = Problem2::from_commands(wire1, wire2);
+    assert_eq!(p.shortest_intersection(), 610);
+
+    let wire1 = "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51";
+    let wire2 = "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7";
+    let p = Problem2::from_commands(wire1, wire2);
+    assert_eq!(p.shortest_intersection(), 410);
+}
+
+#[test]
+fn problem_2() {
+    assert_eq!(
+        Problem2::from_commands(WIRE1, WIRE2).shortest_intersection(),
+        93654
+    );
 }
 
 #[test]
