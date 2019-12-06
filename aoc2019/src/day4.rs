@@ -6,6 +6,7 @@ struct Spec {
 
 // turns "123" into vec![0, 0, 0, 1, 2, 3]
 fn digits(x: usize) -> Vec<u8> {
+    // yes this is icky, suck it up
     format!("{:06}", x)
         .into_bytes()
         .into_iter()
@@ -24,6 +25,9 @@ fn test_increasing() {
     assert!(!increasing(&[2, 2, 3, 4, 5, 0]));
 }
 
+// Suspicous because we aren't checking adjacency,
+// but because the numbers are nondecreasing, any valid
+// number with a group only has one group.
 fn has_doubles(ds: &[u8]) -> bool {
     let mut counts = [0u8; 10];
     for d in ds.iter().copied() {
@@ -33,6 +37,15 @@ fn has_doubles(ds: &[u8]) -> bool {
         }
     }
     false
+}
+
+fn has_exact_double(ds: &[u8]) -> bool {
+    let mut counts = [0u8; 10];
+    for d in ds.iter().copied() {
+        counts[d as usize] += 1;
+    }
+    // translation: there is at least one group of exactly 2 digits.
+    counts.iter().filter(|count| **count == 2).count() > 0
 }
 
 fn valid(candidate: usize) -> bool {
@@ -50,6 +63,15 @@ impl Spec {
 
     fn count_valid(&self) -> usize {
         (self.start..=self.end).filter(|x| valid(*x)).count()
+    }
+
+    fn count_valider(&self) -> usize {
+        (self.start..=self.end)
+            .filter(|candidate| {
+                let ds = digits(*candidate);
+                increasing(&ds) && has_exact_double(&ds)
+            })
+            .count()
     }
 }
 
@@ -75,6 +97,18 @@ fn problem_1_examples() {
 #[test]
 fn problem_1() {
     assert_eq!(Spec::from_str(INPUT).count_valid(), 1330)
+}
+
+#[test]
+fn problem_2_examples() {
+    assert!(has_exact_double(&[1, 1, 2, 2, 3, 3]));
+    assert!(!has_exact_double(&[1, 2, 3, 4, 4, 4]));
+    assert!(has_exact_double(&[1, 1, 1, 1, 2, 2]));
+}
+
+#[test]
+fn problem_2() {
+    assert_eq!(Spec::from_str(INPUT).count_valider(), 876)
 }
 
 static INPUT: &str = "231832-767346";
