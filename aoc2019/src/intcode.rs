@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use std::collections::{HashMap, VecDeque};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Machine {
     pub pc: usize,
     pub memory: Vec<isize>,
@@ -204,4 +204,3 @@ impl Machine {
         while self.step() == Step::Continue {}
     }
 }
-
