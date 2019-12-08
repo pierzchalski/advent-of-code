@@ -1,5 +1,4 @@
-// As prophesised: rewritten to use the more expressive machine.
-use crate::day5::Machine;
+use crate::intcode::Machine;
 
 #[test]
 fn problem_1_examples() {
