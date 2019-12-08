@@ -1,4 +1,4 @@
-use petgraph::{graph::NodeIndex, Graph,Undirected, algo::dijkstra};
+use petgraph::{algo::dijkstra, graph::NodeIndex, Graph, Undirected};
 use std::collections::HashMap;
 
 struct Orbits<'a> {
@@ -20,10 +20,7 @@ impl<'a> Orbits<'a> {
 
             orbits.add_edge(lhs_node, rhs_node, ());
         }
-        Orbits {
-            nodes,
-            orbits,
-        }
+        Orbits { nodes, orbits }
     }
 
     // Distances from COM.
@@ -32,7 +29,9 @@ impl<'a> Orbits<'a> {
     }
 
     fn distance(&self, from: &str, to: &str) -> usize {
-        let distances = dijkstra(&self.orbits, self.nodes[from], Some(self.nodes[to]), |_| 1usize);
+        let distances = dijkstra(&self.orbits, self.nodes[from], Some(self.nodes[to]), |_| {
+            1usize
+        });
         distances[&self.nodes[to]]
     }
 }
