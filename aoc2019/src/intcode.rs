@@ -4,6 +4,7 @@ use std::collections::{HashMap, VecDeque};
 #[derive(Debug, Clone)]
 pub struct Machine {
     pub pc: usize,
+    pub relative_base: isize,
     pub memory: Vec<isize>,
     // Specifying the input events ahead of time might come back to bite us
     // but it's good enough for now.
@@ -16,7 +17,7 @@ pub struct Machine {
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
-enum Step {
+pub enum Step {
     Continue,
     Input,
     Output(isize),
@@ -27,6 +28,7 @@ enum Step {
 enum ArgMode {
     Immediate,
     Position,
+    Relative,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Copy, Clone)]
@@ -45,6 +47,7 @@ lazy_static! {
         m.insert(Opcode(6), Machine::jump_if_false);
         m.insert(Opcode(7), Machine::less_than);
         m.insert(Opcode(8), Machine::equals);
+        m.insert(Opcode(9), Machine::adjust_relative_base);
         m.insert(Opcode(99), Machine::halt);
         m
     };
@@ -54,21 +57,21 @@ lazy_static! {
 // are needed for the given opcode, or we could be lazy and just return
 // the maximum number needed.
 fn parse_opcode(code: isize) -> (Opcode, Vec<ArgMode>) {
+    use ArgMode::*;
     assert!(code >= 0);
     let opcode = Opcode((code % 100) as usize); // get last two digits
     let mut mode = code / 100;
     let mut result = Vec::new();
     while mode > 0 {
-        if mode % 2 == 1 {
-            result.push(ArgMode::Immediate)
-        } else {
-            result.push(ArgMode::Position)
-        }
+        result.push(match mode % 10 {
+            0 => Position,
+            1 => Immediate,
+            2 => Relative,
+            other => panic!("Unexpected opcode argument mode {}", other),
+        });
         mode /= 10;
     }
-    while result.len() < 3 {
-        result.push(ArgMode::Position);
-    }
+    result.resize(3, Position);
     (opcode, result)
 }
 
@@ -87,34 +90,71 @@ fn check_parse_opcode() {
         parse_opcode(144),
         (Opcode(44), vec![Immediate, Position, Position])
     );
+    assert_eq!(
+        parse_opcode(20200),
+        (Opcode(0), vec![Relative, Position, Relative])
+    );
 }
 
 impl Machine {
     pub fn from_mem_spec(mem: &str) -> Self {
-        let memory = mem.split(',').map(|s| s.parse().unwrap()).collect();
+        let memory: Vec<isize> = mem.split(',').map(|s| s.parse().unwrap()).collect();
         Machine {
             pc: 0,
+            relative_base: 0,
             input: VecDeque::new(),
             output: Vec::new(),
             memory,
         }
     }
 
-    fn read(&self, addr: usize, mode: ArgMode) -> isize {
-        match mode {
-            ArgMode::Immediate => self.memory[addr],
-            ArgMode::Position => {
-                let addr = self.memory[addr];
-                debug_assert!(addr >= 0);
-                self.memory[addr as usize]
-            }
+    fn grow_mem(&mut self, addr: usize) {
+        if addr >= self.memory.len() {
+            self.memory.resize(addr + 1, 0);
         }
     }
 
-    pub fn write(&mut self, addr: usize, value: isize) {
-        let target = self.memory[addr];
-        debug_assert!(target >= 0);
-        self.memory[target as usize] = value;
+    fn read(&mut self, addr: usize, mode: ArgMode) -> isize {
+        match mode {
+            ArgMode::Immediate => {
+                self.grow_mem(addr);
+                self.memory[addr]
+            },
+            ArgMode::Position => {
+                let addr = self.memory[addr];
+                debug_assert!(addr >= 0);
+                self.grow_mem(addr as usize);
+                self.memory[addr as usize]
+            },
+            ArgMode::Relative => {
+                let addr = self.memory[addr];
+                let addr = addr as isize + self.relative_base;
+                debug_assert!(addr >= 0);
+                self.grow_mem(addr as usize);
+                self.memory[addr as usize]
+            },
+        }
+    }
+
+    fn write(&mut self, addr: usize, value: isize, mode: ArgMode) {
+        match mode {
+            ArgMode::Position => {
+                self.grow_mem(addr);
+                let target = self.memory[addr];
+                debug_assert!(target >= 0);
+                self.grow_mem(target as usize);
+                self.memory[target as usize] = value;
+            },
+            ArgMode::Relative => {
+                self.grow_mem(addr);
+                let addr = self.memory[addr];
+                let addr = addr + self.relative_base;
+                debug_assert!(addr >= 0);
+                self.grow_mem(addr as usize);
+                self.memory[addr as usize] = value;
+            },
+            ArgMode::Immediate => panic!("Writing out in immediate mode!"),
+        }
     }
 
     fn add(&mut self, modes: Vec<ArgMode>) -> Step {
@@ -122,7 +162,7 @@ impl Machine {
         // Probably, but then the spec would probably change and we'd be screwed.
         let in1 = self.read(self.pc + 1, modes[0]);
         let in2 = self.read(self.pc + 2, modes[1]);
-        self.write(self.pc + 3, in1 + in2);
+        self.write(self.pc + 3, in1 + in2, modes[2]);
         self.pc += 4;
         Step::Continue
     }
@@ -130,7 +170,7 @@ impl Machine {
     fn mul(&mut self, modes: Vec<ArgMode>) -> Step {
         let in1 = self.read(self.pc + 1, modes[0]);
         let in2 = self.read(self.pc + 2, modes[1]);
-        self.write(self.pc + 3, in1 * in2);
+        self.write(self.pc + 3, in1 * in2, modes[2]);
         self.pc += 4;
         Step::Continue
     }
@@ -139,9 +179,9 @@ impl Machine {
         Step::Halt
     }
 
-    fn input(&mut self, _: Vec<ArgMode>) -> Step {
+    fn input(&mut self, modes: Vec<ArgMode>) -> Step {
         if let Some(in1) = self.input.pop_front() {
-            self.write(self.pc + 1, in1);
+            self.write(self.pc + 1, in1, modes[0]);
             self.pc += 2;
             Step::Continue
         } else {
@@ -184,7 +224,7 @@ impl Machine {
         let in1 = self.read(self.pc + 1, modes[0]);
         let in2 = self.read(self.pc + 2, modes[1]);
         let result = if in1 < in2 { 1 } else { 0 };
-        self.write(self.pc + 3, result);
+        self.write(self.pc + 3, result, modes[2]);
         self.pc += 4;
         Step::Continue
     }
@@ -193,12 +233,19 @@ impl Machine {
         let in1 = self.read(self.pc + 1, modes[0]);
         let in2 = self.read(self.pc + 2, modes[1]);
         let result = if in1 == in2 { 1 } else { 0 };
-        self.write(self.pc + 3, result);
+        self.write(self.pc + 3, result, modes[2]);
         self.pc += 4;
         Step::Continue
     }
 
-    fn step(&mut self) -> Step {
+    fn adjust_relative_base(&mut self, modes: Vec<ArgMode>) -> Step {
+        let in1 = self.read(self.pc + 1, modes[0]);
+        self.relative_base += in1;
+        self.pc += 2;
+        Step::Continue
+    }
+
+    pub fn step(&mut self) -> Step {
         let code = self.memory[self.pc];
         let (code, modes) = parse_opcode(code);
         let instruction = INSTRUCTION[&code];
