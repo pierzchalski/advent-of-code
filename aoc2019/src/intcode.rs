@@ -18,6 +18,8 @@ pub struct Machine {
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum Step {
     Continue,
+    Input,
+    Output(isize),
     Halt,
 }
 
@@ -138,17 +140,20 @@ impl Machine {
     }
 
     fn input(&mut self, _: Vec<ArgMode>) -> Step {
-        let in1 = self.input.pop_front().unwrap();
-        self.write(self.pc + 1, in1);
-        self.pc += 2;
-        Step::Continue
+        if let Some(in1) = self.input.pop_front() {
+            self.write(self.pc + 1, in1);
+            self.pc += 2;
+            Step::Continue
+        } else {
+            Step::Input
+        }
     }
 
     fn output(&mut self, modes: Vec<ArgMode>) -> Step {
         let out1 = self.read(self.pc + 1, modes[0]);
         self.output.push(out1);
         self.pc += 2;
-        Step::Continue
+        Step::Output(out1)
     }
 
     fn jump_if_true(&mut self, modes: Vec<ArgMode>) -> Step {
@@ -200,7 +205,29 @@ impl Machine {
         instruction(self, modes)
     }
 
+    // Runs to completion, assumes self.input and self.output are set up
+    // as needed.
     pub fn run(&mut self) {
-        while self.step() == Step::Continue {}
+        use Step::*;
+        loop {
+            match self.step() {
+                Output(_) | Continue => continue,
+                Halt => break,
+                Input => panic!("waiting for input during complete run!"),
+            }
+        }
+    }
+
+    // runs until the next output step, or halts.
+    pub fn run_to_output(&mut self) -> Option<isize> {
+        use Step::*;
+        loop {
+            match self.step() {
+                Continue => continue,
+                Output(output) => return Some(output),
+                Halt => return None,
+                Input => panic!("waiting for input during output run!"),
+            }
+        }
     }
 }

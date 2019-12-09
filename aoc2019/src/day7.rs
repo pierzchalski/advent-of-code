@@ -3,15 +3,19 @@ use itertools::Itertools;
 
 struct Amp {
     machine: Machine,
-    phase: isize,
 }
 
 impl Amp {
-    fn run(&mut self, input: isize) -> isize {
-        self.machine.input.push_back(self.phase);
+    fn new(mut machine: Machine, phase: isize) -> Self {
+        machine.input.push_back(phase);
+        Amp {
+            machine,
+        }
+    }
+
+    fn run(&mut self, input: isize) -> Option<isize> {
         self.machine.input.push_back(input);
-        self.machine.run();
-        self.machine.output.pop().unwrap()
+        self.machine.run_to_output()
     }
 }
 
@@ -22,18 +26,31 @@ struct AmpChain {
 impl AmpChain {
     fn from_phases(machine: &Machine, phases: impl Iterator<Item = isize>) -> Self {
         let amps = phases
-            .map(|phase| Amp {
-                machine: machine.clone(),
-                phase,
-            })
+            .map(|phase| Amp::new(machine.clone(), phase))
             .collect();
         AmpChain { amps }
     }
 
     fn get_signal(&mut self) -> isize {
-        let mut signal = 0;
+        self.loop_once(0).unwrap()
+    }
+
+    fn loop_once(&mut self, input: isize) -> Option<isize> {
+        let mut signal = input;
         for amp in self.amps.iter_mut() {
-            signal = amp.run(signal);
+            if let Some(new_signal) = amp.run(signal) {
+                signal = new_signal
+            } else {
+                return None;
+            }
+        }
+        Some(signal)
+    }
+
+    fn get_loop_signal(&mut self) -> isize {
+        let mut signal = 0;
+        while let Some(new_signal) = self.loop_once(signal) {
+            signal = new_signal;
         }
         signal
     }
@@ -53,6 +70,17 @@ impl Problem {
             .iter()
             .permutations(5)
             .map(|perm| AmpChain::from_phases(machine, perm.into_iter().copied()).get_signal())
+            .max()
+            .unwrap()
+    }
+
+    fn max_loop_signal(&self) -> isize {
+        let phases = [5, 6, 7, 8, 9];
+        let machine = &self.0;
+        phases
+            .iter()
+            .permutations(5)
+            .map(|perm| AmpChain::from_phases(machine, perm.into_iter().copied()).get_loop_signal())
             .max()
             .unwrap()
     }
@@ -76,6 +104,22 @@ fn problem_1_examples() {
 #[test]
 fn problem_1() {
     assert_eq!(Problem::from_program(INPUT).max_signal(), 17790);
+}
+
+#[test]
+fn problem_2_examples() {
+    let program = "3,26,1001,26,-4,26,3,27,1002,27,2,27,1,27,26,27,4,27,1001,28,-1,28,1005,28,6,99,0,0,5";
+    let problem = Problem::from_program(program);
+    assert_eq!(problem.max_loop_signal(), 139629729);
+
+    let program = "3,52,1001,52,-5,52,3,53,1,52,56,54,1007,54,5,55,1005,55,26,1001,54,-5,54,1105,1,12,1,53,54,53,1008,54,0,55,1001,55,1,55,2,53,55,53,4,53,1001,56,-1,56,1005,56,6,99,0,0,0,0,10";
+    let problem = Problem::from_program(program);
+    assert_eq!(problem.max_loop_signal(), 18216);
+}
+
+#[test]
+fn problem_2() {
+    assert_eq!(Problem::from_program(INPUT).max_loop_signal(), 19384820);
 }
 
 static INPUT: &str = "3,8,1001,8,10,8,105,1,0,0,21,38,63,72,85,110,191,272,353,434,99999,3,9,102,4,9,9,101,2,9,9,102,3,9,9,4,9,99,3,9,1001,9,4,9,102,2,9,9,1001,9,5,9,1002,9,5,9,101,3,9,9,4,9,99,3,9,1001,9,2,9,4,9,99,3,9,1001,9,3,9,102,2,9,9,4,9,99,3,9,101,2,9,9,102,2,9,9,1001,9,2,9,1002,9,4,9,101,2,9,9,4,9,99,3,9,1002,9,2,9,4,9,3,9,102,2,9,9,4,9,3,9,101,2,9,9,4,9,3,9,101,2,9,9,4,9,3,9,101,1,9,9,4,9,3,9,101,2,9,9,4,9,3,9,1002,9,2,9,4,9,3,9,101,2,9,9,4,9,3,9,101,1,9,9,4,9,3,9,1002,9,2,9,4,9,99,3,9,1001,9,1,9,4,9,3,9,102,2,9,9,4,9,3,9,1001,9,2,9,4,9,3,9,102,2,9,9,4,9,3,9,1001,9,2,9,4,9,3,9,101,2,9,9,4,9,3,9,1002,9,2,9,4,9,3,9,1001,9,2,9,4,9,3,9,1001,9,2,9,4,9,3,9,1001,9,1,9,4,9,99,3,9,1001,9,1,9,4,9,3,9,1001,9,1,9,4,9,3,9,1001,9,2,9,4,9,3,9,102,2,9,9,4,9,3,9,1002,9,2,9,4,9,3,9,102,2,9,9,4,9,3,9,1002,9,2,9,4,9,3,9,1002,9,2,9,4,9,3,9,101,2,9,9,4,9,3,9,101,2,9,9,4,9,99,3,9,1001,9,2,9,4,9,3,9,1002,9,2,9,4,9,3,9,101,1,9,9,4,9,3,9,102,2,9,9,4,9,3,9,1001,9,2,9,4,9,3,9,1002,9,2,9,4,9,3,9,102,2,9,9,4,9,3,9,1001,9,2,9,4,9,3,9,1002,9,2,9,4,9,3,9,102,2,9,9,4,9,99,3,9,1002,9,2,9,4,9,3,9,101,1,9,9,4,9,3,9,101,2,9,9,4,9,3,9,101,1,9,9,4,9,3,9,101,2,9,9,4,9,3,9,102,2,9,9,4,9,3,9,101,2,9,9,4,9,3,9,1002,9,2,9,4,9,3,9,1002,9,2,9,4,9,3,9,101,2,9,9,4,9,99";
