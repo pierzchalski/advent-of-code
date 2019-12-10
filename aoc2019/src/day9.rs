@@ -25,7 +25,10 @@ fn problem_1_examples() {
     let program = "109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99";
     let mut machine = Machine::from_mem_spec(program);
     machine.run();
-    assert_eq!(&machine.output, &[109,1,204,-1,1001,100,1,100,1008,100,16,101,1006,101,0,99]);
+    assert_eq!(
+        &machine.output,
+        &[109, 1, 204, -1, 1001, 100, 1, 100, 1008, 100, 16, 101, 1006, 101, 0, 99]
+    );
 }
 
 #[test]

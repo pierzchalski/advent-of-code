@@ -119,20 +119,20 @@ impl Machine {
             ArgMode::Immediate => {
                 self.grow_mem(addr);
                 self.memory[addr]
-            },
+            }
             ArgMode::Position => {
                 let addr = self.memory[addr];
                 debug_assert!(addr >= 0);
                 self.grow_mem(addr as usize);
                 self.memory[addr as usize]
-            },
+            }
             ArgMode::Relative => {
                 let addr = self.memory[addr];
                 let addr = addr as isize + self.relative_base;
                 debug_assert!(addr >= 0);
                 self.grow_mem(addr as usize);
                 self.memory[addr as usize]
-            },
+            }
         }
     }
 
@@ -144,7 +144,7 @@ impl Machine {
                 debug_assert!(target >= 0);
                 self.grow_mem(target as usize);
                 self.memory[target as usize] = value;
-            },
+            }
             ArgMode::Relative => {
                 self.grow_mem(addr);
                 let addr = self.memory[addr];
@@ -152,7 +152,7 @@ impl Machine {
                 debug_assert!(addr >= 0);
                 self.grow_mem(addr as usize);
                 self.memory[addr as usize] = value;
-            },
+            }
             ArgMode::Immediate => panic!("Writing out in immediate mode!"),
         }
     }
