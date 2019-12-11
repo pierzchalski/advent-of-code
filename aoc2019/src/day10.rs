@@ -1,10 +1,8 @@
-use euclid;
 use float_cmp::approx_eq;
 use num::Integer;
 use std::collections::HashSet;
 
-type Point = euclid::Point2D<isize, ()>;
-type Vector = euclid::Vector2D<isize, ()>;
+use crate::utils::types::*;
 
 struct Laser {
     location: Point,
