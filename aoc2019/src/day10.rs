@@ -85,9 +85,7 @@ impl Problem {
         // we start off pointing at a target, whatever
         let (_, target_dir) = self
             .asteroid_dirs()
-            .min_by(|(_, d1), (_, d2)| {
-                closest(self.laser.direction, *d1, *d2)
-            })
+            .min_by(|(_, d1), (_, d2)| closest(self.laser.direction, *d1, *d2))
             .unwrap();
         let possible_targets = self
             .asteroid_dirs()
@@ -176,11 +174,13 @@ fn problem_1() {
 
 #[test]
 fn problem_2_examples() {
-    let mut problem = Problem::from_str(".#....#####...#..
+    let mut problem = Problem::from_str(
+        ".#....#####...#..
 ##...##.#####..##
 ##...#...#.#####.
 ..#.....#...###..
-..#.#.....#....##");
+..#.#.....#....##",
+    );
     assert_eq!(problem.laser.location, Point::new(8, 3));
 
     assert_eq!(problem.fire_laser(), Point::new(8, 1));
@@ -193,7 +193,9 @@ fn problem_2_examples() {
     assert_eq!(problem.fire_laser(), Point::new(11, 2));
     assert_eq!(problem.fire_laser(), Point::new(15, 1));
 
-    for _ in 0..18 { problem.fire_laser(); }
+    for _ in 0..18 {
+        problem.fire_laser();
+    }
 
     assert_eq!(problem.fire_laser(), Point::new(6, 1));
     assert_eq!(problem.fire_laser(), Point::new(6, 0));
